@@ -1,0 +1,137 @@
+---
+title: 'Will Trump be President?'
+author: ''
+date: "`r Sys.Date()`"
+image: pic17.jpg
+output:
+  html_document:
+    theme: flatly
+    highlight: zenburn
+    number_sections: yes
+    toc: yes
+    toc_float: yes
+    code_folding: show
+  pdf_document:
+    toc: yes
+---
+
+
+```{r, setup, include=FALSE}
+knitr::opts_chunk$set(
+  message = FALSE, 
+  warning = FALSE, 
+  tidy=FALSE,     # display code as typed
+  size="small")   # slightly smaller font for code
+options(digits = 3)
+
+# default figure size
+knitr::opts_chunk$set(
+  fig.width=6.75, 
+  fig.height=6.75,
+  fig.align = "center"
+)
+```
+
+
+```{r load-libraries, include=FALSE}
+library(tidyverse)  # Load ggplot2, dplyr, and all the other tidyverse packages
+library(mosaic)
+library(ggthemes)
+library(lubridate)
+library(here)
+library(skimr)
+library(janitor)
+library(httr)
+library(readxl)
+library(vroom)
+```
+
+
+
+# Trump's Approval Margins
+
+To conduct our research, fivethirtyeight.com has detailed data on [all polls that track the president's approval ](https://projects.fivethirtyeight.com/trump-approval-ratings)
+
+Let's get the tidy dataframe first.
+
+```{r, cache=TRUE}
+# Importing approval polls data
+approval_polllist <- read_csv(here::here("data", "trump.csv")) 
+
+glimpse(approval_polllist)
+
+approval_polllist_tidy <- approval_polllist %>%
+   mutate(enddate_date = mdy(enddate),
+          enddate_month = month(enddate_date, label=TRUE),
+          enddate_year = year(enddate_date))
+```
+
+## Create a plot
+
+We would like to calculate the average net approval rate (approve- disapprove) for each week since he got into office. We plot the net approval, along with its 95% confidence interval.
+
+```{r trump_margins, warning=FALSE, out.width="100%"}
+
+#clean data
+approvalrate <- approval_polllist %>%
+  mutate(net_approval = approve - disapprove,
+
+#arrange date 
+         enddate = mdy(enddate),
+         week = week(enddate),
+         year = year(enddate),
+         year_cha = paste(as.character(year))) %>%
+  
+#calculate SD and CI
+  group_by(year, week) %>%
+  mutate(average_net_approval_week = mean(net_approval)) %>%
+  mutate(sd_approval = sd(net_approval) / sqrt(count(week)-1),
+         upper = average_net_approval_week + 1.96 * sd_approval,
+         lower = average_net_approval_week - 1.96 * sd_approval)
+
+#create plot
+ggplot(approvalrate, aes(x = week, y = average_net_approval_week)) +
+  geom_line(aes(colour = year_cha)) +
+  
+#upper and lower line
+  geom_line(aes(y = upper, colour = year_cha)) +
+  geom_line(aes(y = lower, colour = year_cha)) +
+  
+#y=0 line
+  geom_hline(yintercept = 0, colour = "orange") +
+  geom_point(size = 1, aes(colour = year_cha)) +
+  geom_ribbon(alpha = 0.2,
+              aes(ymin = lower, ymax = upper, fill = year_cha)) +
+  
+#facet by year
+  facet_wrap(~year,
+             scales = "fixed",
+             ncol = 2) +
+  
+#We can fill it with color: scale_fill_manual(values=c("red", "green", "blue", "purple")) +
+  scale_x_continuous(breaks = seq(0,52,13)) +
+  scale_y_continuous(breaks = seq(-20,7.5,2.5)) +
+
+#theme of the plot
+  theme_bw() +
+  theme(legend.position = "none") +
+
+#title and labels  
+    labs (
+    title = "Estimating Net Approval (approve-disapprove) for Donald Trump",
+    x     = "Week of the year",
+    y     = "Average Net Approval (%)",
+    subtitle = "Weekly average of all polls"
+  )
+```
+
+## Compare Confidence Intervals
+
+Compare the confidence intervals for `week 15` (6-12 April 2020) and `week 34` (17-23 August 2020). What happened?
+
+```{r trump_margins_CI, echo=FALSE, out.width="100%"}
+approvalrate %>%
+  filter(year == 2020, week == 15 | week == 34) %>% 
+  summarise(mean(upper), mean(lower))
+```
+>In early-mid April (week 15), unlike its European counterparts, the US was only at the beginning of the growing wave of covid-19 cases clustered priomarily in NYC. However, by the end of August (week 34) there were far more cases and deaths recorded across the country together with the job losses. Moreover, the summer highlighted the persistent social issue of the America with the Black Lives Matter protests that Trump neglected. These reasons may explain a mucher greater discrepancy in the opinions of the respondents that in turn led to a larger standard error in net approvals and therefore CI expanding from ca. 1.33% to 3.08%.

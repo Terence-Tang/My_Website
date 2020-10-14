@@ -1,5 +1,3 @@
-# My_Website
+# Terence's First Website
 
-Hello World!
-
-Test line again!
+Thanks for visiting!
